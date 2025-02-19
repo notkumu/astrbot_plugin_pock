@@ -5,7 +5,7 @@ import os
 import time
 import shutil
 
-@register("poke_monitor", "Your Name", "监控戳一戳事件插件", "1.4.0")
+@register("poke_monitor", "Your Name", "监控戳一戳事件插件", "1.2.0")
 class PokeMonitorPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
