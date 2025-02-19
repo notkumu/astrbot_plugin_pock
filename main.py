@@ -3,9 +3,10 @@ import random
 import requests
 import os
 import time
+import shutil
 
 
-@register("poke_monitor", "Your Name", "监控戳一戳事件插件", "1.0.0")
+@register("astrbot_plugin_pock", "长安某", "监控戳一戳事件插件", "1.1.0")
 class PokeMonitorPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -15,8 +16,17 @@ class PokeMonitorPlugin(Star):
         self.poke_responses = [
             "别戳啦！",
             "哎呀，还戳呀，别闹啦！",
-            "别戳我啦,你要做什么,不理你了"
+            "别戳我啦  你要做什么  不理你了"
         ]
+
+        # 删除原图片目录
+        old_save_dir = os.path.join('.', 'data', 'plugins', 'poke_monitor')
+        if os.path.exists(old_save_dir):
+            try:
+                shutil.rmtree(old_save_dir)
+                print(f"成功删除原图片目录: {old_save_dir}")
+            except Exception as e:
+                print(f"删除原图片目录时出错: {e}")
 
     @event_message_type(EventMessageType.GROUP_MESSAGE)
     async def on_group_message(self, event: AstrMessageEvent):
@@ -51,7 +61,7 @@ class PokeMonitorPlugin(Star):
                     poke_count = len(self.user_poke_timestamps[sender_id])
 
                     # 如果戳的次数小于 3，根据次数选择回复并输出
-                    if poke_count < 3:
+                    if poke_count <= 3:
                         if poke_count <= len(self.poke_responses):
                             response = self.poke_responses[poke_count - 1]
                         else:
@@ -113,10 +123,10 @@ class PokeMonitorPlugin(Star):
                             if response.status_code == 200:
                                 image_data = response.content
                                 # 确保保存图片的目录存在
-                                save_dir = './data/plugins/poke_monitor'
+                                save_dir = os.path.join('data', 'plugins', 'astrbot_plugin_pock', 'poke_monitor')
                                 if not os.path.exists(save_dir):
                                     os.makedirs(save_dir)
-                                image_path = f"{save_dir}/{selected_action}_{target_id}.gif"
+                                image_path = os.path.join(save_dir, f"{selected_action}_{target_id}.gif")
                                 with open(image_path, "wb") as file:
                                     file.write(image_data)
                                 yield event.image_result(image_path)
