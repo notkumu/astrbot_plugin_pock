@@ -4,18 +4,78 @@ import requests
 import os
 import time
 import shutil
+import yaml
 
-@register("poke_monitor", "Your Name", "监控戳一戳事件插件", "1.2.0")
+@register("poke_monitor", "Your Name", "监控戳一戳事件插件", "1.3.0")
 class PokeMonitorPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
         self.user_poke_timestamps = {}
-        self.poke_responses = [
-            "别戳啦！",
-            "哎呀，还戳呀，别闹啦！",
-            "别戳我啦  你要做什么  不理你了"
-        ]
+        # 构建配置文件路径
+        config_dir = os.path.join("data", "plugins", "astrbot_plugin_pock")
+        config_path = os.path.join(config_dir, "config.yml")
+
+        # 检查配置文件是否存在，若不存在则创建并写入默认值
+        if not os.path.exists(config_path):
+            self._create_default_config(config_path)
+
+        try:
+            # 读取配置文件
+            with open(config_path, 'r', encoding='utf-8') as f:
+                self.config = yaml.safe_load(f)
+            self.poke_responses = self.config.get('poke_responses', [])
+            self.emoji_url_mapping = self.config.get('emoji_url_mapping', {})
+            self.random_emoji_trigger_probability = self.config['random_emoji_trigger_probability']
+            self.feature_switches = self.config.get('feature_switches', {})
+            self.poke_back_probability = self.config['poke_back_probability']
+            self.super_poke_probability = self.config['super_poke_probability']
+        except FileNotFoundError:
+            self.logger.error(f"未找到配置文件: {config_path}")
+        except Exception as e:
+            self.logger.error(f"读取配置文件时出错: {str(e)}")
+
         self._clean_legacy_directories()
+
+    def _create_default_config(self, config_path):
+        """创建默认配置文件"""
+        default_config = {
+            # 戳一戳回复消息
+            "poke_responses": [
+                "别戳啦！",
+                "哎呀，还戳呀，别闹啦！",
+                "别戳我啦  你要做什么  不理你了"
+            ],
+            # 表情包 API 映射
+            "emoji_url_mapping": {
+                "咬": "https://api.lolimi.cn/API/face_suck/api.php",
+                "捣": "https://api.lolimi.cn/API/face_pound/api.php",
+                "玩": "https://api.lolimi.cn/API/face_play/api.php",
+                "拍": "https://api.lolimi.cn/API/face_pat/api.php",
+                "丢": "https://api.lolimi.cn/API/diu/api.php",
+                "撕": "https://api.lolimi.cn/API/si/api.php",
+                "爬": "https://api.lolimi.cn/API/pa/api.php"
+            },
+            # 随机触发表情包的概率
+            "random_emoji_trigger_probability": 0.5,
+            # 功能开关
+            "feature_switches": {
+                "poke_response_enabled": True,
+                "poke_back_enabled": True,
+                "emoji_trigger_enabled": True
+            },
+            # 戳 Bot 反击相关概率
+            "poke_back_probability": 0.3,
+            "super_poke_probability": 0.1
+        }
+        # 创建配置文件所在目录
+        config_dir = os.path.dirname(config_path)
+        os.makedirs(config_dir, exist_ok=True)
+        try:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                yaml.dump(default_config, f, allow_unicode=True, default_flow_style=False)
+            self.logger.info(f"已创建默认配置文件: {config_path}")
+        except Exception as e:
+            self.logger.error(f"创建默认配置文件时出错: {str(e)}")
 
     def _clean_legacy_directories(self):
         """安全清理旧目录（仅删除特定目录）"""
@@ -23,7 +83,7 @@ class PokeMonitorPlugin(Star):
             os.path.abspath("./data/plugins/poke_monitor"),  # 旧版本目录
             os.path.abspath("./data/plugins/plugins/poke_monitor")  # 防止误删其他插件
         ]
-        
+
         for path in legacy_dirs:
             try:
                 if os.path.exists(path):
@@ -63,14 +123,15 @@ class PokeMonitorPlugin(Star):
                     self.user_poke_timestamps[sender_id].append(now)
 
                     # 文本回复
-                    poke_count = len(self.user_poke_timestamps[sender_id])
-                    if poke_count < 3:
-                        response = self.poke_responses[poke_count-1] if poke_count <= len(self.poke_responses) else self.poke_responses[-1]
-                        yield event.plain_result(response)
+                    if self.feature_switches.get('poke_response_enabled', True):
+                        poke_count = len(self.user_poke_timestamps[sender_id])
+                        if poke_count < 4:
+                            response = self.poke_responses[poke_count - 1] if poke_count <= len(self.poke_responses) else self.poke_responses[-1]
+                            yield event.plain_result(response)
 
                     # 概率戳回
-                    if random.random() < 0.3:
-                        if random.random() < 0.1:
+                    if self.feature_switches.get('poke_back_enabled', True) and random.random() < self.poke_back_probability:
+                        if random.random() < self.super_poke_probability:
                             poke_times = 10
                             yield event.plain_result("喜欢戳是吧")
                             is_super = True
@@ -94,38 +155,42 @@ class PokeMonitorPlugin(Star):
                                     self.logger.error(f"发送戳一戳失败: {str(e)}")
 
                 # 用户戳其他人（且不是机器人自己触发的）
-                elif str(sender_id) != str(bot_id):  # 新增关键判断
-                    # 表情包处理逻辑
-                    available_actions = ["咬", "捣", "玩", "拍", "丢", "撕", "爬"]
-                    selected_action = random.choice(available_actions)  # 定义selected_action
+                elif str(sender_id) != str(bot_id):  
+                    # 随机触发表情包
+                    if self.feature_switches.get('emoji_trigger_enabled', True) and random.random() < self.random_emoji_trigger_probability:
+                        available_actions = list(self.emoji_url_mapping.keys())
+                        selected_action = random.choice(available_actions)
 
-                    url_mapping = {
-                        "咬": "https://api.lolimi.cn/API/face_suck/api.php",
-                        "捣": "https://api.lolimi.cn/API/face_pound/api.php",
-                        "玩": "https://api.lolimi.cn/API/face_play/api.php",
-                        "拍": "https://api.lolimi.cn/API/face_pat/api.php",
-                        "丢": "https://api.lolimi.cn/API/diu/api.php",
-                        "撕": "https://api.lolimi.cn/API/si/api.php",
-                        "爬": "https://api.lolimi.cn/API/pa/api.php"
-                    }
-                    url = url_mapping.get(selected_action)
-                    params = {'QQ': target_id}
-                    
-                    try:
-                        response = requests.get(url, params=params, timeout=5)
-                        if response.status_code == 200:
-                            # 跨平台安全路径
-                            save_dir = os.path.join("data", "plugins", "astrbot_plugin_pock", "poke_monitor")
-                            os.makedirs(save_dir, exist_ok=True)
-                            
-                            # 唯一文件名防止冲突
-                            filename = f"{selected_action}_{target_id}_{int(time.time())}.gif"
-                            image_path = os.path.join(save_dir, filename)
-                            
-                            with open(image_path, "wb") as f:
-                                f.write(response.content)
-                            yield event.image_result(image_path)
-                        else:
-                            yield event.plain_result(f"表情包请求失败，状态码：{response.status_code}")
-                    except Exception as e:
-                        yield event.plain_result(f"表情包处理出错：{str(e)}")
+                        url = self.emoji_url_mapping.get(selected_action)
+                        params = {'QQ': target_id}
+
+                        # 硬编码请求配置
+                        timeout = 10
+                        max_retries = 3
+                        retry_count = 0
+                        while retry_count < max_retries:
+                            try:
+                                response = requests.get(url, params=params, timeout=timeout)
+                                if response.status_code == 200:
+                                    # 跨平台安全路径
+                                    save_dir = os.path.join("data", "plugins", "astrbot_plugin_pock", "poke_monitor")
+                                    os.makedirs(save_dir, exist_ok=True)
+
+                                    # 唯一文件名防止冲突
+                                    filename = f"{selected_action}_{target_id}_{int(time.time())}.gif"
+                                    image_path = os.path.join(save_dir, filename)
+
+                                    with open(image_path, "wb") as f:
+                                        f.write(response.content)
+                                    yield event.image_result(image_path)
+                                    break
+                                else:
+                                    yield event.plain_result(f"表情包请求失败，状态码：{response.status_code}")
+                                    break
+                            except requests.exceptions.ReadTimeout:
+                                retry_count += 1
+                                if retry_count == max_retries:
+                                    yield event.plain_result(f"表情包处理出错：多次请求超时，无法获取数据。")
+                            except Exception as e:
+                                yield event.plain_result(f"表情包处理出错：{str(e)}")
+                                break
