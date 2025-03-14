@@ -1,8 +1,20 @@
-# 戳一戳回复消息
-poke_responses:
-  - "别戳啦！"
-  - "哎呀，还戳呀，别闹啦！"
-  - "别戳我啦  你要做什么  不理你了"
+# 戳一戳回复模板配置
+response_templates:
+  initial_responses:
+    - "别戳啦！"
+    - "哎呀，还戳呀，别闹啦！"
+  persistent_responses:
+    - "再戳我要生气啦！"
+    - "检测到持续戳动行为≥▽≤"
+  special_scenarios:
+    night_time: "深夜戳人是不礼貌的哦～"
+    morning_time: "早上好呀，新的一天开始啦～"
+
+# 冷却时间配置（单位：秒）
+cooldown_settings:
+  global_cooldown: 60
+  user_specific_cooldown: 30
+  group_cooldown: 120
 
 # 表情包 API 映射
 emoji_url_mapping:
@@ -11,17 +23,29 @@ emoji_url_mapping:
   玩: "https://api.lolimi.cn/API/face_play/api.php"
   拍: "https://api.lolimi.cn/API/face_pat/api.php"
   丢: "https://api.lolimi.cn/API/diu/api.php"
-  撕: "https://api.lolimi.cn/API/si/api.php"
   爬: "https://api.lolimi.cn/API/pa/api.php"
 
-# 随机触发表情包的概率
-random_emoji_trigger_probability: 0.5
+# 表情包触发逻辑配置
+emoji_trigger:
+  base_probability: 0.5
+  time_based_adjustments:
+    night_hours: [22, 23, 0, 1, 2, 3, 4, 5, 6]
+    probability_multiplier: 0.3
+  consecutive_trigger:
+    decay_factor: 0.8
+    max_consecutive: 3
+  user_relationship:
+    familiar_user_boost: 1.2
+    new_user_penalty: 0.7
 
 # 功能开关
 feature_switches:
   poke_response_enabled: true  # 戳机器人回复功能开关
   poke_back_enabled: true  # 戳回功能开关
   emoji_trigger_enabled: true  # 触发表情包功能开关
+
+# 用户黑名单配置
+blocked_users: []  # 需要屏蔽的用户QQ号列表
 
 # 戳 Bot 反击相关概率
 poke_back_probability: 0.3  # 戳 Bot 后反击的概率
